@@ -21,17 +21,17 @@ def init_models():
         "yellow": {"blue":0.05, "green":0.05, "yellow":0.65, "orange":0.20},
         "orange": {"blue":0.05, "green":0.05, "yellow":0.15, "orange":0.60},
         "nothing":{"blue":0.10, "green":0.10, "yellow":0.10, "orange":0.10}
-    } #[zk][xk]
+    } 
 
 
     N = 11
-    transition_models = {} #[u][x_cur, x_next]
+    transition_models = {}
 
     T_neg1 = np.zeros((N, N))
     for i in range(N):
-        T_neg1[i, (i - 1) % N] = 0.85   # one step backward
-        T_neg1[i, i]           = 0.10   # stay
-        T_neg1[i, (i + 1) % N] = 0.05   # overshoot forward
+        T_neg1[i, (i - 1) % N] = 0.85 
+        T_neg1[i, i]           = 0.10 
+        T_neg1[i, (i + 1) % N] = 0.05  
     transition_models[-1] = T_neg1
 
     T_0 = np.zeros((N, N))
@@ -43,9 +43,9 @@ def init_models():
 
     T_pos1 = np.zeros((N, N))
     for i in range(N):
-        T_pos1[i, (i - 1) % N] = 0.05   # undershoot
-        T_pos1[i, i]           = 0.10   # stay
-        T_pos1[i, (i + 1) % N] = 0.85   # one step forward
+        T_pos1[i, (i - 1) % N] = 0.05  
+        T_pos1[i, i]           = 0.10 
+        T_pos1[i, (i + 1) % N] = 0.85 
     transition_models[1] = T_pos1
 
     return color_map, measurement_model, transition_models
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
     states = list(color_map.keys())
     fig, ax = plt.subplots(figsize=(10, 5))
-    belief_matrix = np.array(belief_history).T  # rows=states, cols=timesteps
+    belief_matrix = np.array(belief_history).T 
     im = ax.imshow(belief_matrix, cmap="viridis", aspect="auto")
     ax.set_yticks(range(N))
     ax.set_yticklabels(states)

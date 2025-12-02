@@ -25,7 +25,7 @@ class BayesLoc:
 
         self.current_state_index = None
 
-        self.cur_colour = None  # most recent measured colour
+        self.cur_colour = None
 
         self.v_x = 0.05
         self.v_z = 0
@@ -34,7 +34,7 @@ class BayesLoc:
         
         self.last_color_idx = None
 
-        self.belief_history = []   # list of belief vectors over time
+        self.belief_history = []
 
     # BayesLoc
     def colour_callback(self, msg):
@@ -61,7 +61,6 @@ class BayesLoc:
         dh = min(abs(hsv1[0] - hsv2[0]), 360 - abs(hsv1[0] - hsv2[0])) / 180.0
         ds = abs(hsv1[1] - hsv2[1])
         dv = abs(hsv1[2] - hsv2[2])
-        # weighted Euclidean distance
         return math.sqrt((1.0 * dh)**2 + (0.5 * ds)**2 + (0.2 * dv)**2)
     
     def classify_colour(self, tolerance=0.25):
@@ -83,15 +82,13 @@ class BayesLoc:
         N = self.num_states
         transition_models = {}
 
-        # u = -1 (move one cell backward, with some noise)
         T_neg1 = np.zeros((N, N))
         for i in range(N):
-            T_neg1[i, (i - 1) % N] = 0.85   # one step backward
-            T_neg1[i, i]           = 0.10   # stay
-            T_neg1[i, (i + 1) % N] = 0.05   # overshoot forward
+            T_neg1[i, (i - 1) % N] = 0.85 
+            T_neg1[i, i]           = 0.10
+            T_neg1[i, (i + 1) % N] = 0.05 
         transition_models[-1] = T_neg1
 
-        # u = 0 (no commanded motion, mostly stay)
         T_0 = np.zeros((N, N))
         for i in range(N):
             T_0[i, (i - 1) % N] = 0.05
@@ -99,12 +96,11 @@ class BayesLoc:
             T_0[i, (i + 1) % N] = 0.05
         transition_models[0] = T_0
 
-        # u = +1 (move one cell forward, with some noise)
         T_pos1 = np.zeros((N, N))
         for i in range(N):
-            T_pos1[i, (i - 1) % N] = 0.05   # undershoot
-            T_pos1[i, i]           = 0.10   # stay
-            T_pos1[i, (i + 1) % N] = 0.85   # one step forward
+            T_pos1[i, (i - 1) % N] = 0.05
+            T_pos1[i, i]           = 0.10
+            T_pos1[i, (i + 1) % N] = 0.85
         transition_models[1] = T_pos1
 
         return transition_models
@@ -124,7 +120,6 @@ class BayesLoc:
         what's the probability that of each possible colour z_k being observed?
         """
         if self.cur_colour is None:
-            # No measurement yet; treat as uninformative
             return np.ones(len(self.colour_codes)) / float(len(self.colour_codes))
 
         hsv_cur = self.rgb_to_hsv(self.cur_colour)
@@ -144,40 +139,31 @@ class BayesLoc:
 
     def state_predict(self, u=1):
         rospy.loginfo("predicting state")
-        T = self.state_model(u)             # (N x N)
-        # Note: T[i,j] = p(x_k = j | x_{k-1} = i), so we want T^T @ belief
+        T = self.state_model(u) 
         self.state_prediction = T.T.dot(self.probability)
 
-        # Normalize for safety
         total = np.sum(self.state_prediction)
         if total > 0:
             self.state_prediction /= total
         else:
-            # fallback to uniform if something went numerically wrong
             self.state_prediction = np.ones(self.num_states) / float(self.num_states)
 
     def state_update(self):
         rospy.loginfo("updating state")
-        # Get p(z | colour_index) for colour_index in {0..4}
-        colour_likelihoods = self.measurement_model()  # shape (5,)
+        colour_likelihoods = self.measurement_model()
 
-        # Map colour likelihoods to each state via the known map of offices by colour
-        # self.colour_map[i] is the colour index of state i
         state_likelihoods = np.zeros(self.num_states)
         for i, colour_idx in enumerate(self.colour_map):
             state_likelihoods[i] = colour_likelihoods[colour_idx]
 
-        # Elementwise multiply with predicted belief
         unnormalized = self.state_prediction * state_likelihoods
 
         total = np.sum(unnormalized)
         if total > 0:
             self.probability = unnormalized / total
         else:
-            # If everything underflows, fall back to prior prediction
             self.probability = self.state_prediction.copy()
 
-        # (Optional) log most likely state
         ml_idx = int(np.argmax(self.probability))
         self.current_state_index = ml_idx
         rospy.loginfo("Most likely state: index %d, colour %d, belief=%.3f",
@@ -206,7 +192,6 @@ if __name__ == "__main__":
         [149, 135, 138],  # line
     ]
 
-    # initial probability of being at a given office is uniform
     p0 = np.ones_like(colour_map) / len(colour_map)
 
     localizer = BayesLoc(p0, colour_codes, colour_map)
@@ -233,20 +218,18 @@ if __name__ == "__main__":
             color_buffer.pop(0)
 
         if len(color_buffer) == CONFIRM_FRAMES and len(set(color_buffer)) == 1:
-            # All readings match
             stable_color = color_buffer[-1]
 
             if stable_color in [0, 1, 2, 3]:
-                # Consistent hallway colour → update confirmed_color
+
                 confirmed_color = stable_color
 
             elif stable_color == 4:
-                # Consistent line detection → clear confirmed_color
+    
                 confirmed_color = None
                 color_buffer.clear()
 
             else:
-                # stable but invalid reading → do nothing
                 pass
 
         if confirmed_color in [0, 1, 2, 3]:
@@ -270,7 +253,6 @@ if __name__ == "__main__":
             twist.angular.z = 0
             localizer.color_v_pub.publish(twist)
             localizer.line_follow_pub.publish(0)
-            # rospy.sleep(0.2)  # brief drive forward before next check
         else:
             rospy.loginfo("LINE detected — following line...")
             twist.linear.x = localizer.v_x
@@ -307,7 +289,7 @@ if __name__ == "__main__":
     rospy.loginfo(localizer.probability)
 
 
-    belief_matrix = np.array(localizer.belief_history).T   # shape (num_states, T)
+    belief_matrix = np.array(localizer.belief_history).T   
 
     plt.figure(figsize=(10, 5))
     plt.imshow(belief_matrix, cmap="viridis", aspect="auto")
